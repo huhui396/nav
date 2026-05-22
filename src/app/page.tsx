@@ -340,7 +340,7 @@ export default function Home() {
       <footer className="border-t border-white/5 mt-24 py-8">
         <div className="max-w-5xl mx-auto px-6 flex items-center justify-between text-xs text-white/20">
           <span>RepurposeAI — AI Content Repurposing Tool</span>
-          <span>Built with Next.js + Turso + Netlify</span>
+          <span>Built with Next.js + Netlify DB + Netlify</span>
         </div>
       </footer>
     </div>

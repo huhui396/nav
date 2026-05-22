@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb, initDb } from "@/lib/turso";
+import { getDb, initDb } from "@/lib/db";
 
 function mockAiTransform(text: string): {
   xPosts: string[];
@@ -54,28 +54,22 @@ export async function POST(req: NextRequest) {
     }
 
     const start = Date.now();
-    await new Promise((r) => setTimeout(r, 800)); // simulate AI latency
+    await new Promise((r) => setTimeout(r, 800));
     const { xPosts, linkedin } = mockAiTransform(text);
     const durationMs = Date.now() - start;
 
     await initDb();
     const db = getDb();
-    await db.execute({
-      sql: `INSERT INTO history_logs (original_text, generated_x_posts, generated_linkedin, duration_ms, created_at)
-            VALUES (?, ?, ?, ?, datetime('now'))`,
-      args: [
-        text.slice(0, 2000),
-        JSON.stringify(xPosts),
-        linkedin,
-        durationMs,
-      ],
-    });
+    await db`
+      INSERT INTO history_logs (original_text, generated_x_posts, generated_linkedin, duration_ms)
+      VALUES (${text.slice(0, 2000)}, ${JSON.stringify(xPosts)}, ${linkedin}, ${durationMs})
+    `;
 
     return NextResponse.json({ xPosts, linkedin, durationMs });
   } catch (err) {
     console.error("[/api/generate]", err);
     return NextResponse.json(
-      { error: "Internal server error. Check your Turso env vars." },
+      { error: "Internal server error. Check your DATABASE_URL env var." },
       { status: 500 }
     );
   }
