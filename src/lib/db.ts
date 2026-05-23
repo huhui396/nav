@@ -35,11 +35,16 @@ export async function initDb() {
       created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
-  // Migrate existing tables
-  await db`ALTER TABLE history_logs ADD COLUMN IF NOT EXISTS generated_instagram TEXT NOT NULL DEFAULT ''`;
-  await db`ALTER TABLE history_logs ADD COLUMN IF NOT EXISTS generated_newsletter TEXT NOT NULL DEFAULT ''`;
-  await db`ALTER TABLE history_logs ADD COLUMN IF NOT EXISTS generated_email TEXT NOT NULL DEFAULT ''`;
-  await db`ALTER TABLE history_logs ADD COLUMN IF NOT EXISTS is_favorited BOOLEAN NOT NULL DEFAULT FALSE`;
+  // Migrate existing tables — wrapped individually so one failure doesn't block the rest
+  const migrations = [
+    db`ALTER TABLE history_logs ADD COLUMN IF NOT EXISTS generated_instagram TEXT NOT NULL DEFAULT ''`,
+    db`ALTER TABLE history_logs ADD COLUMN IF NOT EXISTS generated_newsletter TEXT NOT NULL DEFAULT ''`,
+    db`ALTER TABLE history_logs ADD COLUMN IF NOT EXISTS generated_email TEXT NOT NULL DEFAULT ''`,
+    db`ALTER TABLE history_logs ADD COLUMN IF NOT EXISTS is_favorited BOOLEAN NOT NULL DEFAULT FALSE`,
+  ];
+  for (const m of migrations) {
+    await m.catch((e) => console.warn("[initDb migration]", e?.message));
+  }
 }
 
 export const FREE_LIMIT = 10;
