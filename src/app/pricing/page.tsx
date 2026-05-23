@@ -12,16 +12,25 @@ export default function PricingPage() {
   const [loading, setLoading] = useState(false);
 
   async function handleUpgrade() {
-    if (!user) { router.push("/sign-up"); return; }
+    if (!user) { router.push("/sign-in"); return; }
     setLoading(true);
-    const res = await fetch("/api/stripe/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ plan: billing }),
-    });
-    const data = await res.json();
-    if (data.url) window.location.href = data.url;
-    else setLoading(false);
+    try {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan: billing }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        alert(data.error || "Failed to start checkout. Please try again.");
+        setLoading(false);
+      }
+    } catch {
+      alert("Network error. Please try again.");
+      setLoading(false);
+    }
   }
 
   const monthlyPrice = billing === "yearly" ? "6.6" : "9.9";
