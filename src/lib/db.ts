@@ -35,12 +35,17 @@ export async function initDb() {
       created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
-  // Migrate existing tables — wrapped individually so one failure doesn't block the rest
+  // Ensure all columns exist regardless of which version created the table
   const migrations = [
+    db`ALTER TABLE history_logs ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT ''`,
+    db`ALTER TABLE history_logs ADD COLUMN IF NOT EXISTS original_text TEXT NOT NULL DEFAULT ''`,
+    db`ALTER TABLE history_logs ADD COLUMN IF NOT EXISTS generated_x_posts TEXT NOT NULL DEFAULT ''`,
+    db`ALTER TABLE history_logs ADD COLUMN IF NOT EXISTS generated_linkedin TEXT NOT NULL DEFAULT ''`,
     db`ALTER TABLE history_logs ADD COLUMN IF NOT EXISTS generated_instagram TEXT NOT NULL DEFAULT ''`,
     db`ALTER TABLE history_logs ADD COLUMN IF NOT EXISTS generated_newsletter TEXT NOT NULL DEFAULT ''`,
     db`ALTER TABLE history_logs ADD COLUMN IF NOT EXISTS generated_email TEXT NOT NULL DEFAULT ''`,
     db`ALTER TABLE history_logs ADD COLUMN IF NOT EXISTS is_favorited BOOLEAN NOT NULL DEFAULT FALSE`,
+    db`ALTER TABLE history_logs ADD COLUMN IF NOT EXISTS duration_ms INTEGER NOT NULL DEFAULT 0`,
   ];
   for (const m of migrations) {
     await m.catch((e) => console.warn("[initDb migration]", e?.message));
