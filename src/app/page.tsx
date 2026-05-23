@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useUser, UserButton, SignInButton } from "@clerk/nextjs";
+import Link from "next/link";
 
 interface HistoryRow {
   id: number;
@@ -15,38 +17,59 @@ interface GenerateResult {
   xPosts: string[];
   linkedin: string;
   durationMs: number;
+  usage: number;
+  plan: "free" | "pro";
+  limit: number;
+}
+
+interface UsageInfo {
+  usage: number;
+  plan: "free" | "pro";
+  limit: number;
 }
 
 export default function Home() {
+  const { user, isLoaded } = useUser();
   const [inputText, setInputText] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<GenerateResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [limitReached, setLimitReached] = useState(false);
   const [history, setHistory] = useState<HistoryRow[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [usageInfo, setUsageInfo] = useState<UsageInfo | null>(null);
 
   const fetchHistory = useCallback(async () => {
+    if (!user) return;
+    setHistoryLoading(true);
     try {
       const res = await fetch("/api/history");
       const data = await res.json();
       if (data.rows) setHistory(data.rows as HistoryRow[]);
-    } catch {
-      // history fetch failure is non-critical
-    } finally {
-      setHistoryLoading(false);
-    }
-  }, []);
+    } catch { /* non-critical */ }
+    finally { setHistoryLoading(false); }
+  }, [user]);
+
+  const fetchUsage = useCallback(async () => {
+    if (!user) return;
+    try {
+      const res = await fetch("/api/user/usage");
+      const data = await res.json();
+      setUsageInfo(data);
+    } catch { /* non-critical */ }
+  }, [user]);
 
   useEffect(() => {
-    fetchHistory();
-  }, [fetchHistory]);
+    if (user) { fetchHistory(); fetchUsage(); }
+  }, [user, fetchHistory, fetchUsage]);
 
   async function handleGenerate() {
     if (!inputText.trim() || loading) return;
     setLoading(true);
     setError(null);
     setResult(null);
+    setLimitReached(false);
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
@@ -54,8 +77,10 @@ export default function Home() {
         body: JSON.stringify({ text: inputText }),
       });
       const data = await res.json();
+      if (res.status === 402) { setLimitReached(true); return; }
       if (!res.ok) throw new Error(data.error ?? "Unknown error");
       setResult(data as GenerateResult);
+      setUsageInfo({ usage: data.usage, plan: data.plan, limit: data.limit });
       fetchHistory();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
@@ -76,16 +101,32 @@ export default function Home() {
       <header className="border-b border-white/5 bg-black/40 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-cyan-400 flex items-center justify-center text-sm font-bold">
-              R
-            </div>
-            <span className="font-semibold text-lg tracking-tight">
-              Repurpose<span className="text-violet-400">AI</span>
-            </span>
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-cyan-400 flex items-center justify-center text-sm font-bold">R</div>
+            <span className="font-semibold text-lg tracking-tight">Repurpose<span className="text-violet-400">AI</span></span>
           </div>
-          <div className="flex items-center gap-2 text-xs text-white/40">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse inline-block" />
-            Powered by AI
+          <div className="flex items-center gap-4">
+            <Link href="/pricing" className="text-xs text-white/40 hover:text-white/70 transition-colors">Pricing</Link>
+            {isLoaded && (
+              user ? (
+                <div className="flex items-center gap-3">
+                  {usageInfo && usageInfo.plan === "free" && (
+                    <span className="text-xs text-white/40">
+                      {usageInfo.usage}/{usageInfo.limit} free
+                    </span>
+                  )}
+                  {usageInfo?.plan === "pro" && (
+                    <span className="text-xs text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded-full">PRO</span>
+                  )}
+                  <UserButton />
+                </div>
+              ) : (
+                <SignInButton mode="modal">
+                  <button className="text-xs px-4 py-1.5 rounded-lg bg-white/8 hover:bg-white/12 transition-colors border border-white/10">
+                    Sign in
+                  </button>
+                </SignInButton>
+              )
+            )}
           </div>
         </div>
       </header>
@@ -98,21 +139,16 @@ export default function Home() {
           </div>
           <h1 className="text-5xl font-bold tracking-tight leading-tight">
             One article.{" "}
-            <span className="bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent">
-              Infinite reach.
-            </span>
+            <span className="bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent">Infinite reach.</span>
           </h1>
           <p className="text-white/50 text-lg max-w-xl mx-auto">
-            Paste any blog post or article and instantly get 3 viral X/Twitter
-            threads and a polished LinkedIn post — ready to publish.
+            Paste any blog post or article and instantly get 3 viral X/Twitter threads and a polished LinkedIn post — ready to publish.
           </p>
         </section>
 
         {/* Input Card */}
         <section className="rounded-2xl border border-white/8 bg-white/3 backdrop-blur-sm p-6 space-y-4">
-          <label className="text-sm text-white/60 font-medium">
-            Your content
-          </label>
+          <label className="text-sm text-white/60 font-medium">Your content</label>
           <textarea
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
@@ -124,49 +160,40 @@ export default function Home() {
             <span className="text-xs text-white/30">
               {inputText.trim().split(/\s+/).filter(Boolean).length} words
             </span>
-            <button
-              onClick={handleGenerate}
-              disabled={loading || inputText.trim().length < 20}
-              className="relative group flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-cyan-600 text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:shadow-lg hover:shadow-violet-500/25 transition-all duration-200"
-            >
-              {loading ? (
-                <>
-                  <svg
-                    className="animate-spin w-4 h-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8v8z"
-                    />
-                  </svg>
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <span>✦</span>
-                  Generate Social Pack
-                </>
-              )}
-            </button>
+            {!isLoaded ? null : !user ? (
+              <SignInButton mode="modal">
+                <button className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-cyan-600 text-sm font-semibold hover:shadow-lg hover:shadow-violet-500/25 transition-all">
+                  <span>✦</span> Sign in to Generate
+                </button>
+              </SignInButton>
+            ) : (
+              <button
+                onClick={handleGenerate}
+                disabled={loading || inputText.trim().length < 20}
+                className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-cyan-600 text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:shadow-lg hover:shadow-violet-500/25 transition-all"
+              >
+                {loading ? (
+                  <><svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg> Generating...</>
+                ) : (<><span>✦</span> Generate Social Pack</>)}
+              </button>
+            )}
           </div>
         </section>
 
+        {/* Limit Reached */}
+        {limitReached && (
+          <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 px-6 py-5 text-center space-y-3">
+            <p className="font-semibold text-violet-300">You've used all 5 free generations this month</p>
+            <p className="text-sm text-white/50">Upgrade to Pro for unlimited generations at $9.9/month.</p>
+            <Link href="/pricing" className="inline-block px-6 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-cyan-600 text-sm font-semibold hover:shadow-lg hover:shadow-violet-500/25 transition-all">
+              Upgrade to Pro →
+            </Link>
+          </div>
+        )}
+
         {/* Error */}
         {error && (
-          <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-300">
-            {error}
-          </div>
+          <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-300">{error}</div>
         )}
 
         {/* Results */}
@@ -174,173 +201,93 @@ export default function Home() {
           <section className="space-y-6">
             <div className="flex items-center gap-3">
               <h2 className="text-lg font-semibold">Your Social Pack</h2>
-              <span className="text-xs text-white/30 bg-white/5 px-2 py-0.5 rounded-full">
-                Generated in {result.durationMs}ms
-              </span>
+              <span className="text-xs text-white/30 bg-white/5 px-2 py-0.5 rounded-full">Generated in {result.durationMs}ms</span>
+              {result.plan === "free" && (
+                <span className="text-xs text-white/30 bg-white/5 px-2 py-0.5 rounded-full">{result.usage}/{result.limit} used</span>
+              )}
             </div>
-
-            {/* X/Twitter Posts */}
             <div className="space-y-3">
-              <p className="text-xs text-white/40 uppercase tracking-widest font-medium">
-                X / Twitter Posts
-              </p>
+              <p className="text-xs text-white/40 uppercase tracking-widest font-medium">X / Twitter Posts</p>
               {result.xPosts.map((post, i) => (
-                <div
-                  key={i}
-                  className="relative rounded-xl border border-white/8 bg-white/3 p-5 group"
-                >
-                  <p className="text-sm text-white/80 whitespace-pre-wrap leading-relaxed pr-8">
-                    {post}
-                  </p>
-                  <button
-                    onClick={() => copyToClipboard(post, i)}
-                    className="absolute top-4 right-4 text-white/20 hover:text-violet-400 transition-colors text-xs"
-                    title="Copy"
-                  >
-                    {copiedIndex === i ? "✓" : "⎘"}
-                  </button>
+                <div key={i} className="relative rounded-xl border border-white/8 bg-white/3 p-5">
+                  <p className="text-sm text-white/80 whitespace-pre-wrap leading-relaxed pr-8">{post}</p>
+                  <button onClick={() => copyToClipboard(post, i)} className="absolute top-4 right-4 text-white/20 hover:text-violet-400 transition-colors text-xs">{copiedIndex === i ? "✓" : "⎘"}</button>
                 </div>
               ))}
             </div>
-
-            {/* LinkedIn Post */}
             <div className="space-y-3">
-              <p className="text-xs text-white/40 uppercase tracking-widest font-medium">
-                LinkedIn Post
-              </p>
-              <div className="relative rounded-xl border border-white/8 bg-white/3 p-5 group">
-                <p className="text-sm text-white/80 whitespace-pre-wrap leading-relaxed pr-8">
-                  {result.linkedin}
-                </p>
-                <button
-                  onClick={() => copyToClipboard(result.linkedin, 99)}
-                  className="absolute top-4 right-4 text-white/20 hover:text-violet-400 transition-colors text-xs"
-                  title="Copy"
-                >
-                  {copiedIndex === 99 ? "✓" : "⎘"}
-                </button>
+              <p className="text-xs text-white/40 uppercase tracking-widest font-medium">LinkedIn Post</p>
+              <div className="relative rounded-xl border border-white/8 bg-white/3 p-5">
+                <p className="text-sm text-white/80 whitespace-pre-wrap leading-relaxed pr-8">{result.linkedin}</p>
+                <button onClick={() => copyToClipboard(result.linkedin, 99)} className="absolute top-4 right-4 text-white/20 hover:text-violet-400 transition-colors text-xs">{copiedIndex === 99 ? "✓" : "⎘"}</button>
               </div>
             </div>
           </section>
         )}
 
         {/* History */}
-        <section className="space-y-5">
-          <div className="flex items-center gap-3 border-b border-white/5 pb-4">
-            <h2 className="text-lg font-semibold">Generation History</h2>
-            {!historyLoading && (
-              <span className="text-xs text-white/30 bg-white/5 px-2 py-0.5 rounded-full">
-                {history.length} records
-              </span>
-            )}
-          </div>
-
-          {historyLoading ? (
-            <div className="flex items-center gap-3 text-white/30 text-sm py-8 justify-center">
-              <svg
-                className="animate-spin w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8v8z"
-                />
-              </svg>
-              Loading history...
+        {user && (
+          <section className="space-y-5">
+            <div className="flex items-center gap-3 border-b border-white/5 pb-4">
+              <h2 className="text-lg font-semibold">Generation History</h2>
+              {!historyLoading && <span className="text-xs text-white/30 bg-white/5 px-2 py-0.5 rounded-full">{history.length} records</span>}
             </div>
-          ) : history.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-white/8 py-12 text-center text-white/25 text-sm">
-              No history yet. Generate your first social pack above!
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {history.map((row) => {
-                let xPosts: string[] = [];
-                try {
-                  xPosts = JSON.parse(row.generated_x_posts);
-                } catch {}
-                return (
-                  <details
-                    key={row.id}
-                    className="rounded-xl border border-white/8 bg-white/2 group"
-                  >
-                    <summary className="px-5 py-4 cursor-pointer list-none flex items-center justify-between hover:bg-white/3 rounded-xl transition-colors">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <span className="text-violet-400 text-xs font-mono shrink-0">
-                          #{row.id}
-                        </span>
-                        <span className="text-sm text-white/70 truncate">
-                          {row.original_text.slice(0, 80)}...
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3 shrink-0 ml-4">
-                        <span className="text-xs text-white/25">
-                          {row.duration_ms}ms
-                        </span>
-                        <span className="text-xs text-white/25">
-                          {new Date(row.created_at).toLocaleDateString()}
-                        </span>
-                        <span className="text-white/20 text-xs group-open:rotate-180 transition-transform">
-                          ▾
-                        </span>
-                      </div>
-                    </summary>
-                    <div className="px-5 pb-5 space-y-4 border-t border-white/5 pt-4">
-                      <div>
-                        <p className="text-xs text-white/30 mb-2">
-                          Original text
-                        </p>
-                        <p className="text-xs text-white/50 bg-black/30 rounded-lg p-3 line-clamp-3">
-                          {row.original_text}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-white/30 mb-2">
-                          X/Twitter Posts
-                        </p>
-                        <div className="space-y-2">
-                          {xPosts.map((p, i) => (
-                            <p
-                              key={i}
-                              className="text-xs text-white/60 bg-black/30 rounded-lg p-3 whitespace-pre-wrap"
-                            >
-                              {p}
-                            </p>
-                          ))}
+            {historyLoading ? (
+              <div className="flex items-center gap-3 text-white/30 text-sm py-8 justify-center">
+                <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+                Loading...
+              </div>
+            ) : history.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-white/8 py-12 text-center text-white/25 text-sm">
+                No history yet. Generate your first social pack above!
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {history.map((row) => {
+                  let xPosts: string[] = [];
+                  try { xPosts = JSON.parse(row.generated_x_posts); } catch {}
+                  return (
+                    <details key={row.id} className="rounded-xl border border-white/8 bg-white/2 group">
+                      <summary className="px-5 py-4 cursor-pointer list-none flex items-center justify-between hover:bg-white/3 rounded-xl transition-colors">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="text-violet-400 text-xs font-mono shrink-0">#{row.id}</span>
+                          <span className="text-sm text-white/70 truncate">{row.original_text.slice(0, 80)}...</span>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0 ml-4">
+                          <span className="text-xs text-white/25">{row.duration_ms}ms</span>
+                          <span className="text-xs text-white/25">{new Date(row.created_at).toLocaleDateString()}</span>
+                          <span className="text-white/20 text-xs group-open:rotate-180 transition-transform">▾</span>
+                        </div>
+                      </summary>
+                      <div className="px-5 pb-5 space-y-4 border-t border-white/5 pt-4">
+                        <div>
+                          <p className="text-xs text-white/30 mb-2">Original text</p>
+                          <p className="text-xs text-white/50 bg-black/30 rounded-lg p-3 line-clamp-3">{row.original_text}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-white/30 mb-2">X/Twitter Posts</p>
+                          <div className="space-y-2">
+                            {xPosts.map((p, i) => <p key={i} className="text-xs text-white/60 bg-black/30 rounded-lg p-3 whitespace-pre-wrap">{p}</p>)}
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-xs text-white/30 mb-2">LinkedIn Post</p>
+                          <p className="text-xs text-white/60 bg-black/30 rounded-lg p-3 whitespace-pre-wrap line-clamp-4">{row.generated_linkedin}</p>
                         </div>
                       </div>
-                      <div>
-                        <p className="text-xs text-white/30 mb-2">
-                          LinkedIn Post
-                        </p>
-                        <p className="text-xs text-white/60 bg-black/30 rounded-lg p-3 whitespace-pre-wrap line-clamp-4">
-                          {row.generated_linkedin}
-                        </p>
-                      </div>
-                    </div>
-                  </details>
-                );
-              })}
-            </div>
-          )}
-        </section>
+                    </details>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
       </main>
 
-      {/* Footer */}
       <footer className="border-t border-white/5 mt-24 py-8">
         <div className="max-w-5xl mx-auto px-6 flex items-center justify-between text-xs text-white/20">
           <span>RepurposeAI — AI Content Repurposing Tool</span>
-          <span>Built with Next.js + Netlify DB + Netlify</span>
+          <Link href="/pricing" className="hover:text-white/40 transition-colors">Pricing</Link>
         </div>
       </footer>
     </div>

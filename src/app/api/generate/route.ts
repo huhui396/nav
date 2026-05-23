@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb, initDb } from "@/lib/db";
+import { auth, currentUser } from "@clerk/nextjs/server";
+import {
+  getDb,
+  initDb,
+  getMonthlyUsage,
+  getUserPlan,
+  upsertUser,
+  FREE_LIMIT,
+} from "@/lib/db";
 
 function mockAiTransform(text: string): {
   xPosts: string[];
@@ -45,6 +53,11 @@ If this resonated with you, I'd love to hear your perspective in the comments. W
 
 export async function POST(req: NextRequest) {
   try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Please sign in to generate content." }, { status: 401 });
+    }
+
     const { text } = await req.json();
     if (!text || typeof text !== "string" || text.trim().length < 20) {
       return NextResponse.json(
@@ -53,23 +66,39 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    await initDb();
+
+    const user = await currentUser();
+    if (user) await upsertUser(userId, user.emailAddresses[0]?.emailAddress ?? "");
+
+    const plan = await getUserPlan(userId);
+    if (plan === "free") {
+      const usage = await getMonthlyUsage(userId);
+      if (usage >= FREE_LIMIT) {
+        return NextResponse.json(
+          { error: "FREE_LIMIT_REACHED", usage, limit: FREE_LIMIT },
+          { status: 402 }
+        );
+      }
+    }
+
     const start = Date.now();
     await new Promise((r) => setTimeout(r, 800));
     const { xPosts, linkedin } = mockAiTransform(text);
     const durationMs = Date.now() - start;
 
-    await initDb();
     const db = getDb();
     await db`
-      INSERT INTO history_logs (original_text, generated_x_posts, generated_linkedin, duration_ms)
-      VALUES (${text.slice(0, 2000)}, ${JSON.stringify(xPosts)}, ${linkedin}, ${durationMs})
+      INSERT INTO history_logs (user_id, original_text, generated_x_posts, generated_linkedin, duration_ms)
+      VALUES (${userId}, ${text.slice(0, 2000)}, ${JSON.stringify(xPosts)}, ${linkedin}, ${durationMs})
     `;
 
-    return NextResponse.json({ xPosts, linkedin, durationMs });
+    const usage = await getMonthlyUsage(userId);
+    return NextResponse.json({ xPosts, linkedin, durationMs, usage, plan, limit: FREE_LIMIT });
   } catch (err) {
     console.error("[/api/generate]", err);
     return NextResponse.json(
-      { error: "Internal server error. Check your DATABASE_URL env var." },
+      { error: "Internal server error." },
       { status: 500 }
     );
   }
