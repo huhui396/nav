@@ -33,7 +33,7 @@ export async function initDb() {
   `;
 }
 
-export const FREE_LIMIT = 5;
+export const FREE_LIMIT = 10;
 
 export async function getMonthlyUsage(userId: string): Promise<number> {
   const db = getDb();
