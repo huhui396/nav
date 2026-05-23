@@ -1,3 +1,4 @@
+export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getDb, initDb } from "@/lib/db";
@@ -13,7 +14,7 @@ export async function POST(req: NextRequest) {
   const stripe = getStripe();
   let event: Stripe.Event;
   try {
-    event = stripe.webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET!);
+    event = await stripe.webhooks.constructEventAsync(body, sig, process.env.STRIPE_WEBHOOK_SECRET!);
   } catch {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
