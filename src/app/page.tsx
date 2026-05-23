@@ -258,7 +258,7 @@ export default function Home() {
           <p className="text-white/50 text-lg max-w-xl mx-auto">
             Paste text or drop a URL — instantly get X threads, LinkedIn, Instagram, Newsletter & Email Subject, all at once.
           </p>
-          <div className="flex items-center justify-center gap-4 pt-2 text-xs text-white/30">
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2 text-xs text-white/30">
             {PLATFORMS.map((p) => (
               <span key={p.key} className="flex items-center gap-1">
                 <span className="text-white/50">{p.icon}</span> {p.label}
@@ -385,7 +385,7 @@ export default function Home() {
             </div>
 
             {/* Platform tabs */}
-            <div className="flex gap-1 p-1 rounded-xl bg-black/30 border border-white/5 w-fit overflow-x-auto">
+            <div className="flex gap-1 p-1 rounded-xl bg-black/30 border border-white/5 overflow-x-auto w-full" style={{scrollbarWidth:"none"}}>
               {PLATFORMS.map((p) => (
                 <button
                   key={p.key}
