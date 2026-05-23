@@ -8,8 +8,8 @@ export async function POST(req: NextRequest) {
 
   const { plan } = await req.json().catch(() => ({ plan: "monthly" }));
   const priceId = plan === "yearly"
-    ? process.env.STRIPE_PRO_YEARLY_PRICE_ID!
-    : process.env.STRIPE_PRO_MONTHLY_PRICE_ID!;
+    ? (process.env.STRIPE_PRO_YEARLY_PRICE_ID || "price_1Ta76hL9Kw61s9iON7YvbfxJ")
+    : (process.env.STRIPE_PRO_MONTHLY_PRICE_ID || "price_1Ta6qvL9Kw61s9iOnUeUfm38");
 
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
   const user = await currentUser();
