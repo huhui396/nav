@@ -12,43 +12,37 @@ import {
 function mockAiTransform(text: string): {
   xPosts: string[];
   linkedin: string;
+  instagram: string;
+  newsletter: string;
+  emailSubject: string;
 } {
-  const words = text.trim().split(/\s+/);
   const sentences = text
     .split(/[.!?]+/)
     .map((s) => s.trim())
-    .filter(Boolean);
+    .filter((s) => s.length > 10);
+  const words = text.trim().split(/\s+/);
+  const topic = words.slice(0, 4).join(" ");
 
-  const topics = words.slice(0, 5).join(" ");
-  const firstSentence = sentences[0] ?? topics;
-  const midSentence = sentences[Math.floor(sentences.length / 2)] ?? topics;
-  const lastSentence = sentences[sentences.length - 1] ?? topics;
+  const s0 = sentences[0] ?? topic;
+  const s1 = sentences[1] ?? s0;
+  const sMid = sentences[Math.floor(sentences.length / 2)] ?? s0;
+  const sLast = sentences[sentences.length - 1] ?? s0;
 
   const xPosts = [
-    `🔥 ${firstSentence}\n\nThis is the insight everyone needs right now. Thread below 👇\n\n#AI #ContentCreator #Viral`,
-    `💡 Hot take: "${midSentence}"\n\nMost people overlook this. Here's why it matters:\n→ Saves time\n→ Scales impact\n→ Changes everything\n\nRetweet if you agree 🚀`,
-    `The secret nobody talks about:\n\n"${lastSentence}"\n\nI've been in this space for years and this is the #1 lesson.\n\nSave this for later. ✅\n\n#Productivity #Growth`,
+    `🔥 ${s0}\n\nThis insight changes everything. Full breakdown 🧵👇\n\n#ContentCreator #AI #Growth`,
+    `Most people get this completely wrong:\n\n"${sMid}"\n\nAfter testing this for months, here's what actually works:\n→ Focus on depth, not breadth\n→ Consistency beats perfection\n→ Value first, always\n\nBookmark this 📌`,
+    `Unpopular opinion: ${sLast}\n\nThe data backs this up entirely.\n\nDisagree? I want to hear why 👇\n\n#HotTake #Productivity #Success`,
   ];
 
-  const linkedin = `I want to share something that changed how I think about content creation.
+  const linkedin = `Something I keep thinking about:\n\n${s0}\n\nAfter exploring this deeply, three things stand out:\n\n✅ ${s1}\n\n✅ ${sMid}\n\n✅ ${sLast}\n\nThe professionals who win long-term aren't the smartest — they're the most consistent. They show up every single day.\n\nWhat's your take? I'd love different perspectives in the comments.\n\n#ProfessionalDevelopment #ContentStrategy #Growth #Leadership`;
 
-${firstSentence}
+  const instagram = `✨ ${s0}\n\n💡 This one idea can transform how you think about ${topic}.\n\nDouble tap if this resonates ❤️\nSave this for when you need a reminder 📌\n\n.\n.\n.\n#ContentCreator #Mindset #GrowthMindset #Inspiration #Motivation #Success #Entrepreneur #Tips #Knowledge #Wisdom`;
 
-After spending considerable time analyzing this, here are my three key takeaways:
+  const newsletter = `Hi there,\n\n${s0} ${s1}\n\n${sMid} This keeps coming back to me the more I sit with it.\n\nThe key takeaway: ${sLast}\n\nI hope this gave you something to think about. Hit reply — I read every response.\n\nUntil next time,`;
 
-1️⃣ **Context is everything.** ${sentences[1] ?? firstSentence} Understanding the nuance here separates average results from exceptional ones.
+  const emailSubject = s0.length <= 60 ? s0 : s0.slice(0, 57) + "...";
 
-2️⃣ **Consistency beats perfection.** The professionals who win long-term aren't necessarily the most talented — they're the most consistent.
-
-3️⃣ **${midSentence}** This one insight alone is worth more than most courses you'll ever buy.
-
-The bottom line? ${lastSentence}
-
-If this resonated with you, I'd love to hear your perspective in the comments. What's the biggest lesson you've learned about content strategy?
-
-#ContentMarketing #LinkedInGrowth #PersonalBrand #Entrepreneurship`;
-
-  return { xPosts, linkedin };
+  return { xPosts, linkedin, instagram, newsletter, emailSubject };
 }
 
 export async function POST(req: NextRequest) {
@@ -84,22 +78,31 @@ export async function POST(req: NextRequest) {
 
     const start = Date.now();
     await new Promise((r) => setTimeout(r, 800));
-    const { xPosts, linkedin } = mockAiTransform(text);
+    const { xPosts, linkedin, instagram, newsletter, emailSubject } = mockAiTransform(text);
     const durationMs = Date.now() - start;
 
     const db = getDb();
-    await db`
-      INSERT INTO history_logs (user_id, original_text, generated_x_posts, generated_linkedin, duration_ms)
-      VALUES (${userId}, ${text.slice(0, 2000)}, ${JSON.stringify(xPosts)}, ${linkedin}, ${durationMs})
-    `;
+    const rows = await db`
+      INSERT INTO history_logs (user_id, original_text, generated_x_posts, generated_linkedin, generated_instagram, generated_newsletter, generated_email, duration_ms)
+      VALUES (${userId}, ${text.slice(0, 2000)}, ${JSON.stringify(xPosts)}, ${linkedin}, ${instagram}, ${newsletter}, ${emailSubject}, ${durationMs})
+      RETURNING id
+    ` as { id: number }[];
 
     const usage = await getMonthlyUsage(userId);
-    return NextResponse.json({ xPosts, linkedin, durationMs, usage, plan, limit: FREE_LIMIT });
+    return NextResponse.json({
+      id: rows[0]?.id,
+      xPosts,
+      linkedin,
+      instagram,
+      newsletter,
+      emailSubject,
+      durationMs,
+      usage,
+      plan,
+      limit: FREE_LIMIT,
+    });
   } catch (err) {
     console.error("[/api/generate]", err);
-    return NextResponse.json(
-      { error: "Internal server error." },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error." }, { status: 500 });
   }
 }

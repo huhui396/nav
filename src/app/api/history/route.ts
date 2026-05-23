@@ -11,12 +11,13 @@ export async function GET() {
     await initDb();
     const db = getDb();
     const rows = await db`
-      SELECT id, original_text, generated_x_posts, generated_linkedin, duration_ms,
-             created_at::text AS created_at
+      SELECT id, original_text, generated_x_posts, generated_linkedin,
+             generated_instagram, generated_newsletter, generated_email,
+             is_favorited, duration_ms, created_at::text AS created_at
       FROM history_logs
       WHERE user_id = ${userId}
       ORDER BY id DESC
-      LIMIT 20
+      LIMIT 30
     `;
     return NextResponse.json({ rows });
   } catch (err) {
